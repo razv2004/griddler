@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import math
 from itertools import combinations
@@ -18,7 +19,7 @@ class Griddler:
         self.n = len(blx_x)
         self.m = len(blx_y)
         self.data = np.array([[0 for _ in range(self.m)] for _ in range(self.n)])
-        self.max_combination = 1000
+        self.max_combination = 10
         self.jobs = {}
 
     def solve(self):
@@ -27,30 +28,33 @@ class Griddler:
 
         while (self.data == 0).any():
             print(f"Starting. max_combinations={self.max_combination}")
-            self.jobs = self.init_jobs()
+            self.solve_loop()
+            # self.print()
+            self.max_combination *= 10
 
-            while len(self.jobs) > 0:
-                max_value = max(self.jobs.values())
-                if max_value <= 0:
-                    break
-                max_key = [k for k, v in self.jobs.items() if v == max_value][0]
-                self.jobs[max_key] = 0
-                (dim, idx) = max_key
+    def solve_loop(self):
+        self.jobs = self.init_jobs()
+        while len(self.jobs) > 0:
+            max_value = max(self.jobs.values())
+            if max_value <= 0:
+                break
+            max_key = [k for k, v in self.jobs.items() if v == max_value][0]
+            self.jobs[max_key] = 0
+            (dim, idx, use_brute_force) = max_key
 
-                if dim == Dimension.ROW:
-                    self.solve_line(self.data[idx, :], self.blx[Dimension.ROW][idx], Dimension.COL)
-                else:
-                    self.solve_line(self.data[:, idx], self.blx[Dimension.COL][idx], Dimension.ROW)
-
-            self.print()
-            self.max_combination *= 2
+            if dim == Dimension.ROW:
+                self.solve_line(self.data[idx, :], self.blx[Dimension.ROW][idx], Dimension.COL, use_brute_force)
+            else:
+                self.solve_line(self.data[:, idx], self.blx[Dimension.COL][idx], Dimension.ROW, use_brute_force)
 
     def init_jobs(self):
         jobs = {}
         for i in range(self.n):
-            jobs[(Dimension.ROW, i)] = 1
+            jobs[(Dimension.ROW, i, False)] = 100
+            jobs[(Dimension.ROW, i, True)] = 1
         for j in range(self.m):
-            jobs[(Dimension.COL, j)] = 1
+            jobs[(Dimension.COL, j, False)] = 100
+            jobs[(Dimension.COL, j, True)] = 1
         return jobs
 
     def print(self):
@@ -67,21 +71,20 @@ class Griddler:
         if len(diffs) > 0:
             old_line[a_idx:a_idx + n_idx] = new_value
             for idx in diffs:
-                self.jobs[(dim, a_idx + idx)] += 1
+                self.jobs[(dim, a_idx + idx, False)] += 100
+                self.jobs[(dim, a_idx + idx, True)] += 1
 
     def update_soft(self, old_line, agg_line, new_line, a_idx, n_idx, first_time):
-        for idx in range(n_idx):
-            if old_line[a_idx+idx] != 0 and old_line[a_idx+idx] != new_line[idx]:
-                return True  # still first time
+        if np.logical_and(old_line[a_idx:a_idx+n_idx] != 0, old_line[a_idx:a_idx+n_idx] != new_line[:n_idx]).any():
+            return True  # still first time
 
-        for idx in range(n_idx):
-            if first_time:
-                agg_line[idx] = new_line[idx]
-            if new_line[idx] != agg_line[idx]:
-                agg_line[idx] = 0
+        if first_time:
+            agg_line[:] = new_line[:]
+        else:
+            agg_line[new_line != agg_line] = 0
         return False
 
-    def solve_line(self, line_data, line_blx, dim):
+    def solve_line(self, line_data, line_blx, dim, use_brute_force):
         grayed = np.nonzero(line_data == 0)
         if len(grayed[0]) == 0:
             return
@@ -96,7 +99,8 @@ class Griddler:
             return
 
         self.freedom_solve(line_data, line_blx, a_idx, z_idx, a_blx, z_blx, dim)
-        self.brute_force(line_data, line_blx, a_idx, z_idx, a_blx, z_blx, dim)
+        if use_brute_force:
+            self.brute_force(line_data, line_blx, a_idx, z_idx, a_blx, z_blx, dim)
 
     def pfx(self, line_data, line_blx, dim):
         return self.pfx_internal(line_data, line_blx, 0, 0, dim)
@@ -199,7 +203,10 @@ def test():
              [3, 4, 1], [3, 3, 2, 1], [3, 7, 1], [2, 6, 2], [2, 5, 3, 1, 4],
              [2, 5, 2, 1, 1, 1], [2, 5, 4, 1, 1, 2], [2, 6, 3, 1, 1], [2, 17, 2], [2, 17, 2],
              [2, 17, 1], [2, 17, 1], [2, 17, 1], [3, 14, 7], [1, 10, 2]]
+    t = time.time()
     Griddler(blx_x, blx_y).solve()
+    print(time.time() - t)
 
 
 test()
+
