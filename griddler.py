@@ -4,18 +4,12 @@ from itertools import combinations
 from enum import Enum
 
 
-class State(Enum):
-    GRAY = 0
-    BLACK = 1
-    WHITE = 2
-
-
 class Dimension(Enum):
     ROW = 0
     COL = 1
 
 
-PRINT_DICT = {State.GRAY.value: '___', State.BLACK.value: 'XXX', State.WHITE.value: '   '}
+PRINT_DICT = {0: '___', 1: 'XXX', 2: '   '}
 
 
 class Griddler:
@@ -23,7 +17,7 @@ class Griddler:
         self.blx = {Dimension.ROW: blx_x, Dimension.COL: blx_y}
         self.n = len(blx_x)
         self.m = len(blx_y)
-        self.data = np.array([[State.GRAY.value for _ in range(self.m)] for _ in range(self.n)])
+        self.data = np.array([[0 for _ in range(self.m)] for _ in range(self.n)])
         self.max_combination = 1000
         self.jobs = {}
 
@@ -31,7 +25,7 @@ class Griddler:
         if sum(sum(self.blx[Dimension.ROW], [])) != sum(sum(self.blx[Dimension.COL], [])):
             raise Exception("Sum mismatch")
 
-        while (self.data == State.GRAY.value).any():
+        while (self.data == 0).any():
             print(f"Starting. max_combinations={self.max_combination}")
             self.jobs = self.init_jobs()
 
@@ -77,18 +71,18 @@ class Griddler:
 
     def update_soft(self, old_line, agg_line, new_line, a_idx, n_idx, first_time):
         for idx in range(n_idx):
-            if old_line[a_idx+idx] != State.GRAY.value and old_line[a_idx+idx] != new_line[idx]:
+            if old_line[a_idx+idx] != 0 and old_line[a_idx+idx] != new_line[idx]:
                 return True  # still first time
 
         for idx in range(n_idx):
             if first_time:
                 agg_line[idx] = new_line[idx]
             if new_line[idx] != agg_line[idx]:
-                agg_line[idx] = State.GRAY.value
+                agg_line[idx] = 0
         return False
 
     def solve_line(self, line_data, line_blx, dim):
-        grayed = np.nonzero(line_data == State.GRAY.value)
+        grayed = np.nonzero(line_data == 0)
         if len(grayed[0]) == 0:
             return
 
@@ -96,7 +90,7 @@ class Griddler:
         (z_idx, z_blx) = self.sfx(line_data, line_blx, dim)
         if a_blx >= z_blx:
             if a_idx < z_idx:
-                self.update(line_data, State.WHITE.value, a_idx, z_idx - a_idx, dim)
+                self.update(line_data, 2, a_idx, z_idx - a_idx, dim)
             return
         if a_idx >= z_idx:
             return
@@ -119,33 +113,33 @@ class Griddler:
             return a_idx, a_blx
     
         if n_blx == 0:  # no more blx
-            self.update(line_data, State.WHITE.value, a_idx, n_idx, dim)
+            self.update(line_data, 2, a_idx, n_idx, dim)
             return a_idx+n_idx-1, a_blx+n_blx-1
 
         current_blx = line_blx[a_blx]
 
-        if line_data[a_idx] == State.BLACK.value:
-            self.update(line_data, State.BLACK.value, a_idx, current_blx, dim)
+        if line_data[a_idx] == 1:
+            self.update(line_data, 1, a_idx, current_blx, dim)
             a_idx += current_blx
             a_blx += 1
             if len(line_data) > a_idx:
-                self.update(line_data, State.WHITE.value, a_idx, 1, dim)
+                self.update(line_data, 2, a_idx, 1, dim)
                 a_idx += 1
             return self.pfx_internal(line_data, line_blx, a_idx, a_blx, dim)
-        elif line_data[a_idx] == State.WHITE.value:
-            maybe_black = np.nonzero(line_data[a_idx:] != State.WHITE.value)
+        elif line_data[a_idx] == 2:
+            maybe_black = np.nonzero(line_data[a_idx:] != 2)
             if len(maybe_black[0]) > 0:
                 a_idx = maybe_black[0][0] + a_idx
                 return self.pfx_internal(line_data, line_blx, a_idx, a_blx, dim)
             else:
                 raise Exception("Shouldn't get here")
         else:
-            blacked = np.nonzero(line_data[a_idx:a_idx + current_blx] == State.BLACK.value)
+            blacked = np.nonzero(line_data[a_idx:a_idx + current_blx] == 1)
             if len(blacked[0]) > 0 and 0 <= blacked[0][0] < current_blx:
                 first_blacked = blacked[0][0]
                 overflow = current_blx - first_blacked
                 if overflow > 0:
-                    self.update(line_data, State.BLACK.value, a_idx + first_blacked, overflow, dim)
+                    self.update(line_data, 1, a_idx + first_blacked, overflow, dim)
             return a_idx, a_blx
 
     def freedom_solve(self, line_data, line_blx, a_idx, z_idx, a_blx, z_blx, dim):
@@ -156,7 +150,7 @@ class Griddler:
             for blx in line_blx[a_blx:z_blx]:
                 blacks = blx - freedom
                 if blacks > 0:
-                    self.update(line_data, State.BLACK.value, idx + freedom, blacks, dim)
+                    self.update(line_data, 1, idx + freedom, blacks, dim)
                 idx = idx + blx + 1
 
     def brute_force(self, line_data, line_blx, a_idx, z_idx, a_blx, z_blx, dim):
@@ -175,16 +169,18 @@ class Griddler:
             blx = a_blx
             for i in range(freedom + n_blx):
                 if i in combo:
-                    closed_blx = np.array([State.BLACK.value for _ in range(line_blx[blx])])
+                    closed_blx = np.array([1 for _ in range(line_blx[blx])])
                     if blx < z_blx - 1:
-                        closed_blx = np.concatenate((closed_blx, np.array([State.WHITE.value])))
+                        closed_blx = np.concatenate((closed_blx, np.array([2])))
                     new_line[idx:idx+len(closed_blx)] = closed_blx
                     idx += len(closed_blx)
                     blx += 1
                 else:
-                    new_line[idx] = State.WHITE.value
+                    new_line[idx] = 2
                     idx += 1
             first_time = self.update_soft(line_data, agg_line, new_line, a_idx, n_idx, first_time) and first_time
+            if not first_time and not agg_line.any():
+                break
         if first_time:
             raise Exception("Dead end")
 
