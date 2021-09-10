@@ -5,17 +5,13 @@ from itertools import combinations
 from enum import Enum
 
 
-class Dimension(Enum):
-    ROW = 0
-    COL = 1
-
-
 PRINT_DICT = {0: '___', 1: 'XXX', 2: '   '}
 
 
 class Griddler:
     def __init__(self, blx_x, blx_y):
-        self.blx = {Dimension.ROW: blx_x, Dimension.COL: blx_y}
+        self.blx_x = blx_x
+        self.blx_y = blx_y
         self.n = len(blx_x)
         self.m = len(blx_y)
         self.data = np.array([[0 for _ in range(self.m)] for _ in range(self.n)])
@@ -23,7 +19,7 @@ class Griddler:
         self.jobs = {}
 
     def solve(self):
-        if sum(sum(self.blx[Dimension.ROW], [])) != sum(sum(self.blx[Dimension.COL], [])):
+        if sum(sum(self.blx_x, [])) != sum(sum(self.blx_y, [])):
             raise Exception("Sum mismatch")
 
         while (self.data == 0).any():
@@ -40,21 +36,21 @@ class Griddler:
                 break
             max_key = [k for k, v in self.jobs.items() if v == max_value][0]
             self.jobs[max_key] = 0
-            (dim, idx, use_brute_force) = max_key
+            (is_col, idx, use_brute_force) = max_key
 
-            if dim == Dimension.ROW:
-                self.solve_line(self.data[idx, :], self.blx[Dimension.ROW][idx], Dimension.COL, use_brute_force)
+            if is_col:
+                self.solve_line(self.data[:, idx], self.blx_y[idx], 0, use_brute_force)
             else:
-                self.solve_line(self.data[:, idx], self.blx[Dimension.COL][idx], Dimension.ROW, use_brute_force)
+                self.solve_line(self.data[idx, :], self.blx_x[idx], 1, use_brute_force)
 
     def init_jobs(self):
         jobs = {}
         for i in range(self.n):
-            jobs[(Dimension.ROW, i, False)] = 100
-            jobs[(Dimension.ROW, i, True)] = 1
+            jobs[(0, i, False)] = 100
+            jobs[(0, i, True)] = 1
         for j in range(self.m):
-            jobs[(Dimension.COL, j, False)] = 100
-            jobs[(Dimension.COL, j, True)] = 1
+            jobs[(1, j, False)] = 100
+            jobs[(1, j, True)] = 1
         return jobs
 
     def print(self):
@@ -62,7 +58,7 @@ class Griddler:
             print(''.join(PRINT_DICT.get(self.data[i, j]) for j in range(self.m)))
         print()
 
-    def update(self, old_line, new_value, a_idx, n_idx, dim):
+    def update(self, old_line, new_value, a_idx, n_idx, other_is_row):
         if n_idx < 0 or a_idx + n_idx > len(old_line):
             raise Exception("Invalid")
         if n_idx == 0:
@@ -71,8 +67,8 @@ class Griddler:
         if len(diffs) > 0:
             old_line[a_idx:a_idx + n_idx] = new_value
             for idx in diffs:
-                self.jobs[(dim, a_idx + idx, False)] += 100
-                self.jobs[(dim, a_idx + idx, True)] += 1
+                self.jobs[(other_is_row, a_idx + idx, False)] += 100
+                self.jobs[(other_is_row, a_idx + idx, True)] += 1
 
     def update_soft(self, old_line, agg_line, new_line, a_idx, n_idx, first_time):
         if np.logical_and(old_line[a_idx:a_idx+n_idx] != 0, old_line[a_idx:a_idx+n_idx] != new_line[:n_idx]).any():
@@ -84,32 +80,32 @@ class Griddler:
             agg_line[new_line != agg_line] = 0
         return False
 
-    def solve_line(self, line_data, line_blx, dim, use_brute_force):
+    def solve_line(self, line_data, line_blx, other_is_row, use_brute_force):
         grayed = np.nonzero(line_data == 0)
         if len(grayed[0]) == 0:
             return
 
-        (a_idx, a_blx) = self.pfx(line_data, line_blx, dim)
-        (z_idx, z_blx) = self.sfx(line_data, line_blx, dim)
+        (a_idx, a_blx) = self.pfx(line_data, line_blx, other_is_row)
+        (z_idx, z_blx) = self.sfx(line_data, line_blx, other_is_row)
         if a_blx >= z_blx:
             if a_idx < z_idx:
-                self.update(line_data, 2, a_idx, z_idx - a_idx, dim)
+                self.update(line_data, 2, a_idx, z_idx - a_idx, other_is_row)
             return
         if a_idx >= z_idx:
             return
 
-        self.freedom_solve(line_data, line_blx, a_idx, z_idx, a_blx, z_blx, dim)
+        self.freedom_solve(line_data, line_blx, a_idx, z_idx, a_blx, z_blx, other_is_row)
         if use_brute_force:
-            self.brute_force(line_data, line_blx, a_idx, z_idx, a_blx, z_blx, dim)
+            self.brute_force(line_data, line_blx, a_idx, z_idx, a_blx, z_blx, other_is_row)
 
-    def pfx(self, line_data, line_blx, dim):
-        return self.pfx_internal(line_data, line_blx, 0, 0, dim)
+    def pfx(self, line_data, line_blx, other_is_row):
+        return self.pfx_internal(line_data, line_blx, 0, 0, other_is_row)
 
-    def sfx(self, line_data, line_blx, dim):
-        (z_idx_inv, z_blx_inv) = self.pfx_internal(np.flip(line_data), list(reversed(line_blx)), 0, 0, dim)
+    def sfx(self, line_data, line_blx, other_is_row):
+        (z_idx_inv, z_blx_inv) = self.pfx_internal(np.flip(line_data), list(reversed(line_blx)), 0, 0, other_is_row)
         return len(line_data) - z_idx_inv, len(line_blx) - z_blx_inv
 
-    def pfx_internal(self, line_data, line_blx, a_idx, a_blx, dim):
+    def pfx_internal(self, line_data, line_blx, a_idx, a_blx, other_is_row):
         n_idx = len(line_data) - a_idx
         n_blx = len(line_blx) - a_blx
 
@@ -117,24 +113,24 @@ class Griddler:
             return a_idx, a_blx
     
         if n_blx == 0:  # no more blx
-            self.update(line_data, 2, a_idx, n_idx, dim)
+            self.update(line_data, 2, a_idx, n_idx, other_is_row)
             return a_idx+n_idx-1, a_blx+n_blx-1
 
         current_blx = line_blx[a_blx]
 
         if line_data[a_idx] == 1:
-            self.update(line_data, 1, a_idx, current_blx, dim)
+            self.update(line_data, 1, a_idx, current_blx, other_is_row)
             a_idx += current_blx
             a_blx += 1
             if len(line_data) > a_idx:
-                self.update(line_data, 2, a_idx, 1, dim)
+                self.update(line_data, 2, a_idx, 1, other_is_row)
                 a_idx += 1
-            return self.pfx_internal(line_data, line_blx, a_idx, a_blx, dim)
+            return self.pfx_internal(line_data, line_blx, a_idx, a_blx, other_is_row)
         elif line_data[a_idx] == 2:
             maybe_black = np.nonzero(line_data[a_idx:] != 2)
             if len(maybe_black[0]) > 0:
                 a_idx = maybe_black[0][0] + a_idx
-                return self.pfx_internal(line_data, line_blx, a_idx, a_blx, dim)
+                return self.pfx_internal(line_data, line_blx, a_idx, a_blx, other_is_row)
             else:
                 raise Exception("Shouldn't get here")
         else:
@@ -143,10 +139,10 @@ class Griddler:
                 first_blacked = blacked[0][0]
                 overflow = current_blx - first_blacked
                 if overflow > 0:
-                    self.update(line_data, 1, a_idx + first_blacked, overflow, dim)
+                    self.update(line_data, 1, a_idx + first_blacked, overflow, other_is_row)
             return a_idx, a_blx
 
-    def freedom_solve(self, line_data, line_blx, a_idx, z_idx, a_blx, z_blx, dim):
+    def freedom_solve(self, line_data, line_blx, a_idx, z_idx, a_blx, z_blx, other_is_row):
         n_idx = z_idx - a_idx
         freedom = n_idx - sum(blx + 1 for blx in line_blx[a_blx:z_blx]) + 1
         if freedom < max(line_blx[a_blx:z_blx]):
@@ -154,10 +150,10 @@ class Griddler:
             for blx in line_blx[a_blx:z_blx]:
                 blacks = blx - freedom
                 if blacks > 0:
-                    self.update(line_data, 1, idx + freedom, blacks, dim)
+                    self.update(line_data, 1, idx + freedom, blacks, other_is_row)
                 idx = idx + blx + 1
 
-    def brute_force(self, line_data, line_blx, a_idx, z_idx, a_blx, z_blx, dim):
+    def brute_force(self, line_data, line_blx, a_idx, z_idx, a_blx, z_blx, other_is_row):
         n_idx = z_idx - a_idx
         n_blx = z_blx - a_blx
         freedom = n_idx - sum(blx + 1 for blx in line_blx[a_blx:z_blx]) + 1
@@ -188,7 +184,7 @@ class Griddler:
         if first_time:
             raise Exception("Dead end")
 
-        return self.update(line_data, agg_line, a_idx, n_idx, dim)
+        return self.update(line_data, agg_line, a_idx, n_idx, other_is_row)
 
 
 def test():
