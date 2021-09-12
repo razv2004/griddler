@@ -4,6 +4,8 @@ import math
 import random
 from itertools import combinations
 
+TWO = np.array([2])
+
 
 class Griddler:
     def __init__(self, blx_x, blx_y):
@@ -172,20 +174,18 @@ class Griddler:
         list_of_combinations = list(list_of_combinations)
         random.shuffle(list_of_combinations)
         for combo in list_of_combinations:
-            new_line = np.zeros(n_idx)
+            new_line = np.zeros(n_idx + 1)
             idx = 0
             blx = a_blx
             for i in range(freedom + n_blx):
                 if i in combo:
-                    closed_blx = np.array([1 for _ in range(line_blx[blx])])
-                    if blx < z_blx - 1:
-                        closed_blx = np.concatenate((closed_blx, np.array([2])))
-                    new_line[idx:idx+len(closed_blx)] = closed_blx
-                    idx += len(closed_blx)
+                    blx_len = line_blx[blx]
+                    new_line[idx:idx + blx_len] = np.ones(blx_len)
+                    idx += blx_len
                     blx += 1
-                else:
-                    new_line[idx] = 2
-                    idx += 1
+                new_line[idx] = 2
+                idx += 1
+            new_line = new_line[:-1]
             first_time = self.update_soft(line_data, agg_line, new_line, a_idx, n_idx, first_time) and first_time
             if not first_time and not agg_line.any():
                 break
@@ -193,7 +193,6 @@ class Griddler:
             raise Exception("Dead end")
 
         return self.update(line_data, agg_line, a_idx, n_idx, other_is_row)
-
 
 def test():
     blx_x = [[1, 1], [1, 16], [19], [9], [2, 4],
