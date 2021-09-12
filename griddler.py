@@ -54,7 +54,7 @@ class Griddler:
 
     @staticmethod
     def weight(s):
-        return math.exp(s)
+        return math.pow(2, s + 1)
 
     def print(self):
         for i in range(self.n):
@@ -74,7 +74,8 @@ class Griddler:
                 self.jobs[(other_is_row, a_idx + idx, False)] += 100 / self.weight(self.sums[other_is_row][a_idx + idx])
                 self.jobs[(other_is_row, a_idx + idx, True)] += 1 / self.weight(self.sums[other_is_row][a_idx + idx])
 
-    def update_soft(self, old_line, agg_line, new_line, a_idx, n_idx, first_time):
+    @staticmethod
+    def update_soft(old_line, agg_line, new_line, a_idx, n_idx, first_time):
         if np.logical_and(old_line[a_idx:a_idx+n_idx] != 0, old_line[a_idx:a_idx+n_idx] != new_line[:n_idx]).any():
             return True  # still first time
 
@@ -118,7 +119,7 @@ class Griddler:
     
         if n_blx == 0:  # no more blx
             self.update(line_data, 2, a_idx, n_idx, other_is_row)
-            return a_idx+n_idx-1, a_blx+n_blx-1
+            return a_idx+n_idx, a_blx+n_blx
 
         current_blx = line_blx[a_blx]
 
