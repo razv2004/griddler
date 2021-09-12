@@ -1,11 +1,8 @@
 import time
 import numpy as np
 import math
+import random
 from itertools import combinations
-from enum import Enum
-
-
-PRINT_DICT = {0: '___', 1: 'XXX', 2: '   '}
 
 
 class Griddler:
@@ -14,7 +11,8 @@ class Griddler:
         self.blx_y = blx_y
         self.n = len(blx_x)
         self.m = len(blx_y)
-        self.data = np.array([[0 for _ in range(self.m)] for _ in range(self.n)])
+        self.data = np.zeros([self.n, self.m])
+        self.sums = [np.zeros(self.n), np.zeros(self.m)]
         self.max_combination = 10
         self.jobs = {}
 
@@ -31,10 +29,10 @@ class Griddler:
     def solve_loop(self):
         self.jobs = self.init_jobs()
         while len(self.jobs) > 0:
-            max_value = max(self.jobs.values())
-            if max_value <= 0:
+            max_key = max(self.jobs, key=self.jobs.get)
+            if self.jobs[max_key] <= 0:
                 break
-            max_key = [k for k, v in self.jobs.items() if v == max_value][0]
+
             self.jobs[max_key] = 0
             (is_col, idx, use_brute_force) = max_key
 
@@ -46,16 +44,21 @@ class Griddler:
     def init_jobs(self):
         jobs = {}
         for i in range(self.n):
-            jobs[(0, i, False)] = 100
-            jobs[(0, i, True)] = 1
+            jobs[(0, i, False)] = 100 / self.weight(self.sums[0][i])
+            jobs[(0, i, True)] = 1 / self.weight(self.sums[0][i])
+
         for j in range(self.m):
-            jobs[(1, j, False)] = 100
-            jobs[(1, j, True)] = 1
+            jobs[(1, j, False)] = 100 / self.weight(self.sums[1][j])
+            jobs[(1, j, True)] = 1 / self.weight(self.sums[1][j])
         return jobs
+
+    @staticmethod
+    def weight(s):
+        return math.exp(s)
 
     def print(self):
         for i in range(self.n):
-            print(''.join(PRINT_DICT.get(self.data[i, j]) for j in range(self.m)))
+            print(''.join({0: '___', 1: 'XXX', 2: '   '}.get(self.data[i, j]) for j in range(self.m)))
         print()
 
     def update(self, old_line, new_value, a_idx, n_idx, other_is_row):
@@ -67,8 +70,9 @@ class Griddler:
         if len(diffs) > 0:
             old_line[a_idx:a_idx + n_idx] = new_value
             for idx in diffs:
-                self.jobs[(other_is_row, a_idx + idx, False)] += 100
-                self.jobs[(other_is_row, a_idx + idx, True)] += 1
+                self.sums[other_is_row][a_idx + idx] += 1
+                self.jobs[(other_is_row, a_idx + idx, False)] += 100 / self.weight(self.sums[other_is_row][a_idx + idx])
+                self.jobs[(other_is_row, a_idx + idx, True)] += 1 / self.weight(self.sums[other_is_row][a_idx + idx])
 
     def update_soft(self, old_line, agg_line, new_line, a_idx, n_idx, first_time):
         if np.logical_and(old_line[a_idx:a_idx+n_idx] != 0, old_line[a_idx:a_idx+n_idx] != new_line[:n_idx]).any():
@@ -163,7 +167,10 @@ class Griddler:
 
         agg_line = np.zeros(n_idx)
         first_time = True
-        for combo in combinations(range(freedom + n_blx), n_blx):
+        list_of_combinations = combinations(range(freedom + n_blx), n_blx)
+        list_of_combinations = list(list_of_combinations)
+        random.shuffle(list_of_combinations)
+        for combo in list_of_combinations:
             new_line = np.zeros(n_idx)
             idx = 0
             blx = a_blx
@@ -205,4 +212,3 @@ def test():
 
 
 test()
-
